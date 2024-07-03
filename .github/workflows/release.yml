@@ -30,7 +30,7 @@ jobs:
        # Build Desktop Packaged application
        - name: Desktop App Package
          run: |
-           cd "${{ github.workspace }}"
+           cd "${{ github.workspace\notepad }}"
            ./gradlew packageMsi
 
        # Get the latest tag
