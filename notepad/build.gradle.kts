@@ -21,7 +21,8 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "MainKt"
-
+        jvmArgs += listOf("-Dstdout.encoding=UTF-8")
+        jvmArgs += listOf("-Dstderr.encoding=UTF-8")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "记事本"
