@@ -21,6 +21,7 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "MainKt"
+        jvmArgs += listOf("-Dfile.encoding=UTF-8")
         jvmArgs += listOf("-Dstdout.encoding=UTF-8")
         jvmArgs += listOf("-Dstderr.encoding=UTF-8")
         nativeDistributions {
