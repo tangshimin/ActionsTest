@@ -25,7 +25,7 @@ jobs:
        # 设置工作目录
        - name: Set working directory
          run: |
-           echo '${{ github.workspace\notepad }}'
+           echo '${{ github.workspace}}'
           
        # Build Desktop Packaged application
        - name: Desktop App Package
