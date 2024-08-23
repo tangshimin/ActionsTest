@@ -53,7 +53,9 @@ jobs:
       - name: Package FFmpeg
         shell: msys2 {0}
         run: |
-          zip -r ffmpeg_windows.zip /usr/local/bin/ffmpeg
+          cd /usr/local/bin
+          mv ffmpeg ffmpeg.exe
+          zip -r ffmpeg_windows.zip ffmpeg.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
