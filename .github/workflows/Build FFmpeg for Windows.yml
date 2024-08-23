@@ -30,7 +30,6 @@ jobs:
       - name: Configure FFmpeg
         shell: msys2 {0}
         run: |
-          cd ffmpeg
           ./configure --disable-everything \
             --enable-ffmpeg \
             --enable-avformat \
