@@ -41,7 +41,8 @@ jobs:
             --enable-decoder=webvtt \
             --enable-decoder=ass \
             --enable-demuxer=mov \
-            --enable-protocol=file
+            --enable-protocol=file \
+            --enable-muxer=srt
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
