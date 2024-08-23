@@ -21,6 +21,7 @@ jobs:
             mingw-w64-x86_64-yasm
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-zlib
+            zip
 
       - name: Download FFmpeg source code
         run: |
