@@ -55,10 +55,10 @@ jobs:
         shell: msys2 {0}
         run: |
           cd /usr/local/bin
-          zip -r ${{ runner.temp }}/ffmpeg_windows.zip ffmpeg.exe ffprobe.exe
+          zip -r /usr/local/bin/ffmpeg_windows.zip ffmpeg.exe ffprobe.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
         with:
           name: ffmpeg-windows
-          path: ${{ runner.temp }}/ffmpeg_windows.zip
+          path: ${{ steps.msys2.outputs.msys2-location }}/usr/local/bin/ffmpeg_windows.zip
