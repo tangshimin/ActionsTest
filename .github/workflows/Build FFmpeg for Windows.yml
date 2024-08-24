@@ -55,9 +55,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd /usr/local/bin
-          ls
-          mv ffmpeg ffmpeg.exe
-          zip -r ffmpeg_windows.zip ffmpeg.exe
+          zip -r ffmpeg_windows.zip ffmpeg.exe ffprobe.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
