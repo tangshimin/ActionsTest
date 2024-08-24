@@ -42,7 +42,9 @@ jobs:
             --enable-decoder=ass \
             --enable-demuxer=mov \
             --enable-protocol=file \
-            --enable-muxer=srt
+            --enable-muxer=srt \
+            --enable-encoder=subrip \
+            --enable-encoder=srt
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
