@@ -16,9 +16,7 @@ jobs:
             automake \
             build-essential \
             libass-dev \
-            libfreetype6-dev \
             libtool \
-            libvorbis-dev \
             pkg-config \
             texinfo \
             wget \
