@@ -41,12 +41,16 @@ jobs:
             --enable-decoder=movtext \
             --enable-decoder=webvtt \
             --enable-decoder=ass \
+            --enable-decoder=ssa \
             --enable-decoder=subrip \
+            --enable-encoder=srt \
+            --enable-encoder=subrip \
+            --enable-encoder=movtext \
             --enable-demuxer=mov \
             --enable-demuxer=matroska \
             --enable-protocol=file \
             --enable-muxer=srt \
-            --enable-encoder=subrip
+
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
