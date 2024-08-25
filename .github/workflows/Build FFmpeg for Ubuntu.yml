@@ -63,11 +63,6 @@ jobs:
           make
           sudo make install
 
-      - name: Package FFmpeg
-        run: |
-          mkdir -p /usr/local/bin/ffmpeg
-          mv /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg/
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
