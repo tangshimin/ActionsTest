@@ -5,7 +5,17 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-13, macos-latest ]
+        include:
+          - os: macos-13
+            arch: x86_64
+            artifact_name: ffmpeg-macos-x86_64
+          - os: macos-latest
+            arch: aarch64
+            artifact_name: ffmpeg-macos-aarch64
 
     steps:
       - name: Install dependencies
@@ -52,5 +62,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-macos
+          name: ${{ matrix.artifact_name }}
           path: /usr/local/bin/ffmpeg
