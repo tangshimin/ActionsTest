@@ -38,6 +38,7 @@ jobs:
             --enable-avcodec \
             --enable-avutil \
             --enable-decoder=srt \
+            --enable-decoder=movtext \
             --enable-decoder=webvtt \
             --enable-decoder=ass \
             --enable-decoder=subrip \
