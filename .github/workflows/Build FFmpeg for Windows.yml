@@ -33,6 +33,7 @@ jobs:
         run: |
           cd ffmpeg
           ./configure --disable-everything \
+            --disable-ffprobe \
             --enable-ffmpeg \
             --enable-avformat \
             --enable-avcodec \
@@ -66,11 +67,11 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir -p /usr/local/bin/ffmpeg
-          mv /usr/local/bin/ffmpeg.exe /usr/local/bin/ffprobe.exe /usr/local/bin/ffmpeg/
+          mv /usr/local/bin/ffmpeg.exe  /usr/local/bin/ffmpeg/
 
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ffmpeg-windows
           path: D:\a\_temp\msys64\usr\local\bin\ffmpeg
