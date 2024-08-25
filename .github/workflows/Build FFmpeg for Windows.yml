@@ -8,9 +8,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v2
-
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
         with:
