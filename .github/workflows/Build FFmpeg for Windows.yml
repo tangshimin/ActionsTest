@@ -48,8 +48,11 @@ jobs:
             --enable-encoder=movtext \
             --enable-demuxer=mov \
             --enable-demuxer=matroska \
-            --enable-protocol=file \
+            --enable-demuxer=ass \
+            --enable-demuxer=srt \
+            --enable-demuxer=webvtt \
             --enable-muxer=srt \
+            --enable-protocol=file \
 
 
       - name: Build and install FFmpeg
