@@ -47,7 +47,7 @@ jobs:
         run: |
           cd ffmpeg
           make
-          make install
+          sudo make install
 
       - name: Package FFmpeg
         run: |
