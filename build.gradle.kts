@@ -16,6 +16,10 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
+    implementation("net.bramp.ffmpeg:ffmpeg:0.7.0")
+
+    implementation("junit:junit:4.13.2")
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 compose.desktop {
