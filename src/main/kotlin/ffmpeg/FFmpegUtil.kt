@@ -13,7 +13,7 @@ fun findFFmpegPath(): String {
         path =  getResourcesFile("ffmpeg/ffmpeg").absolutePath
         if(!File(path).exists()){
             println("ffmpeg not unzipped")
-            val zipFile = getResourcesFile("ffmpeg.zip")
+            val zipFile = getResourcesFile("ffmpeg/ffmpeg.zip")
             // 必须使用系统命令行解压缩，否则会报错
             val process = Runtime.getRuntime().exec("unzip -o ${zipFile.absolutePath} -d ${zipFile.parentFile.absolutePath}")
             process.waitFor()
