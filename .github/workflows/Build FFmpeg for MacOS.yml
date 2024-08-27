@@ -51,7 +51,9 @@ jobs:
             --enable-demuxer=srt \
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
-            --enable-protocol=file
+            --enable-protocol=file \
+            --enable-static \
+            --disable-shared
 
       - name: Build and install FFmpeg
         run: |
