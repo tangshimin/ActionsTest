@@ -9,14 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ macos-13,macos-latest]
-        include:
-          - os: macos-13
-            arch: x64
-            name: macOS x86_64
-          - os: macos-latest
-            arch: aarch64
-            name: macOS aarch64
+        os: [ubuntu-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
