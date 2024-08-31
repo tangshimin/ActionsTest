@@ -5,8 +5,8 @@ on:
 
 jobs:
   test:
-    name: ubuntu-latest
-    runs-on: ubuntu-latest
+    test-windows:
+      runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
