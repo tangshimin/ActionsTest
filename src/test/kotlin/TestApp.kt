@@ -15,6 +15,7 @@ class TestApp {
         composeTestRule.setContent {
             App()
         }
+        println("测试中文字符显示")
         composeTestRule.onNode(hasText("Hello, Github"))
             .assertExists()
             .performClick()

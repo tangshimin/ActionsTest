@@ -8,8 +8,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+
+      - name: Set UTF-8 Before Display Chinese Characters
+        run: echo "测试中文字符显示：你好，世界！"
 
       - name: Set UTF-8 Locale
         run: |
