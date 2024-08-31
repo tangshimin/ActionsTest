@@ -1,0 +1,20 @@
+name: Test Windows UTF-8 Support
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set UTF-8 Locale
+        run: |
+          chcp 65001
+          echo "当前代码页已更改为 65001 (UTF-8)"
+
+      - name: Display Chinese Characters
+        run: echo "测试中文字符显示：你好，世界！"
