@@ -28,6 +28,7 @@ compose.desktop {
         jvmArgs += listOf("-Dfile.encoding=UTF-8")
         jvmArgs += listOf("-Dstdout.encoding=UTF-8")
         jvmArgs += listOf("-Dstderr.encoding=UTF-8")
+        jvmArgs += listOf("-Dsun.stdout.encoding=UTF-8")
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "记事本"
