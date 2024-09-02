@@ -33,6 +33,13 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "记事本"
             packageVersion = "1.0.0"
+            vendor = "深圳市龙华区幕境网络工作室"
+            licenseFile.set(project.file("LICENSE"))
+            windows{
+//                console = true
+                dirChooser = true
+                menuGroup = "幕境"
+            }
         }
     }
 }
