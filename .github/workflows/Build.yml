@@ -1,0 +1,35 @@
+name: Build Windows Package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Windows Package
+  create-win-package:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    name: Create Windows Package
+    steps:
+      # Setup Java environment for the next steps
+      - name: Setup Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: 21
+
+      # Check out current repository
+      - name: Fetch Sources
+        uses: actions/checkout@v4
+
+
+      # Build Desktop Packaged application
+      - name: Desktop App Package
+        run: ./gradlew packageMsi
+
+      # Upload Artifact
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: notepad-windows
+          path: build/compose/binaries/main/msi/*.msi
