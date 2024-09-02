@@ -25,7 +25,9 @@ jobs:
 
       # Build Desktop Packaged application
       - name: Desktop App Package
-        run: ./gradlew packageMsi
+        run: |
+          chcp 65001
+          ./gradlew packageMsi
 
       # Upload Artifact
       - name: Upload Artifact
