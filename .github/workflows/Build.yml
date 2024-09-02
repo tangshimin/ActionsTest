@@ -23,11 +23,15 @@ jobs:
         uses: actions/checkout@v4
 
 
+      # Replace Chinese characters with English in build.gradle.kts
+      - name: Replace Chinese Characters
+        run: |
+          $filePath = "build.gradle.kts"
+          (Get-Content $filePath) -replace '记事本', 'notepad' | Set-Content $filePath
+
       # Build Desktop Packaged application
       - name: Desktop App Package
-        run: |
-          chcp 65001
-          ./gradlew packageMsi
+        run: ./gradlew packageMsi
 
       # Upload Artifact
       - name: Upload Artifact
