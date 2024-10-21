@@ -23,6 +23,9 @@ jobs:
             zip
             nasm
 
+      - name: Check iconv installation
+        run: where iconv
+
       - name: Download FFmpeg source code
         run: |
           git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
@@ -56,7 +59,7 @@ jobs:
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
             --enable-protocol=file \
-            --enable-iconv=auto \
+            --enable-iconv \
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
