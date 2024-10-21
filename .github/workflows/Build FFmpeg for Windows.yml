@@ -18,7 +18,10 @@ jobs:
             mingw-w64-x86_64-yasm
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-iconv
+            mingw-w64-x86_64-bzip2
             zip
+            nasm
 
       - name: Download FFmpeg source code
         run: |
@@ -30,6 +33,8 @@ jobs:
         run: |
           cd ffmpeg
           ./configure --disable-everything \
+            --enable-static \
+            --disable-shared \
             --disable-ffprobe \
             --enable-ffmpeg \
             --enable-avformat \
@@ -51,7 +56,8 @@ jobs:
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
             --enable-protocol=file \
-
+            --enable-iconv \
+            --extra-libs="-liconv -lbz2 -lz -static"
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
@@ -64,8 +70,7 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir -p /usr/local/bin/ffmpeg
-          mv /usr/local/bin/ffmpeg.exe  /usr/local/bin/ffmpeg/
-
+          mv /usr/local/bin/ffmpeg.exe /usr/local/bin/ffmpeg/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
