@@ -35,7 +35,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd ffmpeg
-          ./configure --disable-everything \
+          ./configure 
             --enable-static \
             --disable-shared \
             --disable-ffprobe \
