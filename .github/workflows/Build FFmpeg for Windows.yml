@@ -56,8 +56,7 @@ jobs:
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
             --enable-protocol=file \
-            --enable-iconv \
-            --extra-libs="-liconv -lbz2 -lz -static"
+            --enable-iconv=auto \
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
