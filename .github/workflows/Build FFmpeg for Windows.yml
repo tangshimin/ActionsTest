@@ -72,10 +72,10 @@ jobs:
         run: |
           mkdir -p /usr/local/bin/ffmpeg
           cp /usr/local/bin/ffmpeg.exe /usr/local/bin/ffmpeg/
-          cp /usr/bin/libbz2-1.dll /usr/local/bin/ffmpeg/
-          cp /usr/bin/libiconv-2.dll /usr/local/bin/ffmpeg/
-          cp /usr/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
-          cp /usr/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
+          cp /mingw64/bin/libbz2-1.dll /usr/local/bin/ffmpeg/
+          cp /mingw64/bin/libiconv-2.dll /usr/local/bin/ffmpeg/
+          cp /mingw64/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
+          cp /mingw64/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
 
 
       - name: Upload artifact
