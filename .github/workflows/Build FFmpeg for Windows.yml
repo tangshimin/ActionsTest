@@ -35,8 +35,7 @@ jobs:
         shell: msys2 {0}
         run: |
           cd ffmpeg
-          ./configure --prefix=/usr/local/bin/ffmpeg \
-            --disable-everything \
+          ./configure --disable-everything \
             --enable-static \
             --disable-shared \
             --disable-ffprobe \
@@ -60,7 +59,6 @@ jobs:
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
             --enable-protocol=file \
-            --enable-iconv \
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
@@ -68,6 +66,16 @@ jobs:
           cd ffmpeg
           make
           make install
+
+      - name: Copy dependencies
+        shell: msys2 {0}
+        run: |
+          mkdir -p /usr/local/bin/ffmpeg
+          cp /usr/local/bin/ffmpeg.exe /usr/local/bin/ffmpeg/
+          cp /usr/bin/libbz2-1.dll /usr/local/bin/ffmpeg/
+          cp /usr/bin/libiconv-2.dll /usr/local/bin/ffmpeg/
+          cp /usr/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
+          cp /usr/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
 
 
       - name: Upload artifact
