@@ -10,7 +10,7 @@ class TestApp {
 
 
     @Test
-    fun TestApp(){
+    fun testApp(){
         // 设置测试环境
         composeTestRule.setContent {
             App()
