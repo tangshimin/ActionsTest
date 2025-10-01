@@ -29,6 +29,13 @@ jobs:
           echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
           echo "ACTIONS_STEP_DEBUG=true" >> $GITHUB_ENV
 
+      - name: Set UTF-8 encoding for Windows
+        if: runner.os == 'Windows'
+        run: |
+          [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
+          chcp 65001
+
       - name: Checkout code
         uses: actions/checkout@v4
 

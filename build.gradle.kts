@@ -46,11 +46,15 @@ compose.desktop {
 
 
 tasks.test {
+    jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8")
     testLogging {
         events("passed", "skipped", "failed", "standardOut", "standardError")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = true
         showExceptions = true
         showCauses = true
         showStackTraces = true
+        displayGranularity = 2
     }
 }
+
