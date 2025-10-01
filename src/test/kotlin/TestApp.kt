@@ -19,13 +19,13 @@ class TestApp {
         }
         
         // 强制使用 UTF-8 编码输出中文
-        val originalOut = System.out
-        try {
-            System.setOut(PrintStream(System.out, true, StandardCharsets.UTF_8.name()))
+//        val originalOut = System.out
+//        try {
+//            System.setOut(PrintStream(System.out, true, StandardCharsets.UTF_8.name()))
             println("测试中文字符显示")
-        } finally {
-            System.setOut(originalOut)
-        }
+//        } finally {
+//            System.setOut(originalOut)
+//        }
 
         composeTestRule.onNode(hasText("Hello, Github"))
             .assertExists()
