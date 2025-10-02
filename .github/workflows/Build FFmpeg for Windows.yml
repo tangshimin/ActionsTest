@@ -60,19 +60,19 @@ jobs:
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
           # 关键修复：创建完整的whisper.pc文件
-          cat > "$PC_FILE" << 'EOF'
-prefix=/usr/local
-exec_prefix=/usr/local
-libdir=/usr/local/lib
-includedir=/usr/local/include
+          cat > "$PC_FILE" << EOF
+          prefix=${PREFIX}
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${prefix}/include
 
-Name: whisper
-Description: Port of OpenAI's Whisper model in C/C++
-Version: 1.8.0
-Libs: -L/usr/local/lib -lwhisper -lggml
-Libs.private: -lm -pthread -lstdc++
-Cflags: -I/usr/local/include
-EOF
+          Name: whisper
+          Description: Port of OpenAI's Whisper model in C/C++
+          Version: 1.8.0
+          Libs: -L\${libdir} -lwhisper -lggml
+          Libs.private: -lm -pthread -lstdc++
+          Cflags: -I\${includedir}
+          EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
           cat "$PC_FILE"
@@ -185,8 +185,8 @@ EOF
           cp /mingw64/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/zlib1.dll /usr/local/bin/ffmpeg/
-      
-      
+
+
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
