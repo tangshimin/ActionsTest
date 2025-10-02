@@ -87,7 +87,7 @@ jobs:
             LIBS_LINE="$LIBS_LINE -lggml"
           fi
           
-          # 关键修复：创建完整的whisper.pc文件，参考macOS版本格式
+          # 关键修复：创建完整的whisper.pc文件，完全参考macOS版本格式
           cat > "$PC_FILE" << EOF
           prefix=${PREFIX}
           exec_prefix=\${prefix}
@@ -97,7 +97,7 @@ jobs:
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          Libs: -L\${libdir} -lwhisper -lggml
+          Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base
           Libs.private: -lm -pthread -lstdc++
           Cflags: -I\${includedir}
           EOF
