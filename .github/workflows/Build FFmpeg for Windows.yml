@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-no-omp:
+    name: Windows (No OpenMP)
     runs-on: windows-latest
-
     steps:
       - name: Install MSYS2
         uses: msys2/setup-msys2@v2
@@ -24,16 +24,16 @@ jobs:
             mingw-w64-x86_64-cmake
             git
 
-      - name: Download FFmpeg source code
+      - name: Download FFmpeg source
         run: |
-          git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
+          git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg --depth 1
 
-      - name: Clone & Build whisper.cpp
+      - name: Clone & Build whisper.cpp (No OpenMP)
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          PREFIX="/usr/local"
-          git clone https://github.com/ggerganov/whisper.cpp.git
+          PREFIX=/usr/local
+          git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
           cd whisper.cpp
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release \
@@ -42,257 +42,216 @@ jobs:
                 -DWHISPER_BUILD_EXAMPLES=OFF \
                 -DWHISPER_BUILD_SHARED_LIB=OFF \
                 -DGGML_SHARED=OFF \
-                -DWHISPER_NO_ACCELERATE=ON \
                 -DGGML_OPENMP=OFF \
+                -DWHISPER_NO_ACCELERATE=ON \
                 -DBUILD_SHARED_LIBS=OFF \
                 ..
           cmake --build . --config Release -j $(nproc)
           cmake --install .
-          
-          # 验证安装 - 查看实际安装的静态库 (已禁用 OpenMP 以避免 GOMP_* 链接错误)
-          echo "=== 查看安装的静态库 (OpenMP disabled) ==="
-          find "${PREFIX}/lib" -name "*.a" | sort || true
-          
-          # 修复库文件命名问题
-          echo "=== 修复库文件命名 ==="
           cd "${PREFIX}/lib"
-          # 将 ggml.a 重命名为 libggml.a 以符合链接器期望
-          if [ -f "ggml.a" ] && [ ! -f "libggml.a" ]; then
-            mv ggml.a libggml.a
-            echo "✓ 重命名 ggml.a -> libggml.a"
-          fi
-          # 检查其他可能的ggml库文件
-          for file in ggml-*.a; do
-            if [ -f "$file" ]; then
-              newname="lib${file}"
-              if [ ! -f "$newname" ]; then
-                mv "$file" "$newname"
-                echo "✓ 重命名 $file -> $newname"
-              fi
-            fi
-          done
-          
-          echo "=== 最终库文件列表 ==="
-          ls -la lib*.a || true
-          
-          echo "=== 查看头文件 ==="
-          find "${PREFIX}/include" -name "*.h" | head -10 || true
-          
-          # 创建正确的 whisper.pc 文件（针对Windows修复，禁用OpenMP不需要 -lgomp）
-          PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
+          # 统一库前缀
+          if [ -f ggml.a ] && [ ! -f libggml.a ]; then mv ggml.a libggml.a; fi
+          for f in ggml-*.a; do [ -f "$f" ] && [ ! -f "lib$f" ] && mv "$f" "lib$f" || true; done
           mkdir -p "${PREFIX}/lib/pkgconfig"
-          
-          # 关键修复：创建完整的whisper.pc文件，去掉缩进，禁用OpenMP避免 GOMP_* 未解析
-          cat > "$PC_FILE" << 'EOF'
+          cat > "${PREFIX}/lib/pkgconfig/whisper.pc" << 'EOF'
           prefix=/usr/local
           exec_prefix=${prefix}
           libdir=${exec_prefix}/lib
           includedir=${prefix}/include
 
           Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++ (OpenMP disabled)
+          Description: Port of OpenAI's Whisper model in C/C++ (No OpenMP)
           Version: 1.8.0
-          Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base -lstdc++ -lpthread -lm
-          Libs.private: -lstdc++ -lpthread -lm
+          Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base
+          Libs.private: -lstdc++ -lm -lpthread
           Cflags: -I${includedir}
-          Requires.private:
           EOF
-          
-          # 兼容性：复制为 libwhisper.pc
-          cp "$PC_FILE" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
-          
-          echo "=== 生成的 whisper.pc 内容 ==="
-          cat "$PC_FILE"
-          echo "=== 生成的 libwhisper.pc 内容 (兼容) ==="
-          cat "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
-          
-          echo "=== 验证 whisper.pc 文件格式 ==="
-          hexdump -C "$PC_FILE" | head -10 || true
+          cp "${PREFIX}/lib/pkgconfig/whisper.pc" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
 
-      - name: Configure FFmpeg
+      - name: Configure FFmpeg (No OpenMP)
         shell: msys2 {0}
         run: |
-          set -e
+          set -euo pipefail
+          export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+          pkg-config --exists whisper || (echo 'whisper.pc missing' && exit 1)
+          echo "whisper version: $(pkg-config --modversion whisper)"
+          echo '#include <whisper.h>\nint main(){return !!whisper_init_from_file_with_params;}' > test.c
+          g++ $(pkg-config --cflags whisper) test.c $(pkg-config --libs whisper) -o /tmp/t || (echo 'link fail' && exit 1)
+          rm -f test.c /tmp/t
           cd ffmpeg
-          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          
-          # 验证库文件是否存在
-          echo "=== 验证库文件存在性 ==="
-          ls -la /usr/local/lib/libwhisper* || echo "whisper库不存在"
-          ls -la /usr/local/lib/libggml* || echo "ggml库不存在"
-          
-          # 额外调试：显示 whisper.pc 原始内容 (去掉缩进检查)
-          echo "=== whisper.pc 内容 (原始) ==="
-          sed -n '1,120p' /usr/local/lib/pkgconfig/whisper.pc || true
-          echo "=== whisper.pc 十六进制前 3 行 ==="; hexdump -C /usr/local/lib/pkgconfig/whisper.pc | head -n 3 || true
-          
-          # 调试 pkg-config 设置
-          echo "=== 调试 pkg-config ==="
-          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
-          ls -la /usr/local/lib/pkgconfig/ || true
-          
-          # 符号检查 (libwhisper)
-          echo "=== 符号检查 (libwhisper) ==="
-          if command -v nm >/dev/null 2>&1; then
-            nm -g --defined-only /usr/local/lib/libwhisper.a | head -n 40 || true
-          else
-            echo "nm 不可用"
-          fi
-          
-          # 基础测试
-          echo "=== 测试 pkg-config whisper (基本) ==="
-          pkg-config --exists whisper && echo "✓ whisper package found" || echo "✗ whisper package not found"
-          echo -n "Version: "; pkg-config --modversion whisper || echo "(获取失败)"
-          echo -n "Cflags: "; pkg-config --cflags whisper || echo "(获取失败)"
-          echo -n "Libs:   "; pkg-config --libs whisper || echo "(获取失败)"
-          echo -n "Libs --static: "; pkg-config --static --libs whisper || echo "(获取失败)"
-          
-          # 版本约束测试
-          echo "=== 版本约束测试 (whisper >= 1.7.5) ==="
-          if pkg-config --exists "whisper >= 1.7.5"; then
-            echo "✓ 版本约束检测通过"
-          else
-            RC=$?
-            echo "✗ 版本约束检测失败 (pkg-config exit=${RC})"
-            echo "--- pkg-config --debug 输出 ---"
-            PKG_CONFIG_DEBUG_SPEW=1 pkg-config --exists "whisper >= 1.7.5" 2>&1 || true
-          fi
-          
-          # 构造更严格/宽松的测试
-            echo "=== 版本边界测试 ==="
-          for v in 1.7.4 1.7.5 1.8.0 2.0.0; do
-            if pkg-config --exists "whisper >= $v"; then
-              echo "whisper >= $v : OK"
-            else
-              echo "whisper >= $v : FAIL"
-            fi
-          done
-          
-          # 编译链接测试（静态与动态）
-          echo "=== 编译/链接测试 ==="
-          cat > test_whisper.c <<'SRC'
-          #include <whisper.h>
-          #include <stdio.h>
-          int main(){
-            struct whisper_context * ctx = whisper_init_from_file("/dev/null");
-            if(!ctx){
-              fprintf(stderr, "ctx null (expected on Windows path)\n");
-            } else {
-              whisper_free(ctx);
-            }
-            struct whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-            (void)p.print_progress;
-            return 0;
-          }
-          SRC
-          set -x
-          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --libs whisper) -o test_whisper_dyn && echo "✓ 动态链接测试成功" || echo "✗ 动态链接测试失败"
-          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --static --libs whisper) -o test_whisper_static && echo "✓ 静态链接测试成功" || echo "✗ 静态链接测试失败"
-          set +x
-          rm -f test_whisper.c test_whisper_dyn test_whisper_static
-          
-          # 如果版本约束失败, 在此直接停止并提示
-          if ! pkg-config --exists "whisper >= 1.7.5"; then
-            echo "ERROR: pkg-config 版本检测失败, 终止以避免误导性 configure 错误" >&2
-            exit 1
-          fi
-          
-          echo "=== 进入 FFmpeg configure 阶段 ==="
-          set +e
           ./configure --disable-everything \
-            --enable-static \
-            --disable-shared \
-            --disable-ffprobe \
-            --enable-ffmpeg \
-            --enable-avformat \
-            --enable-avcodec \
-            --enable-avutil \
-            --enable-avfilter \
-            --enable-swresample \
+            --enable-static --disable-shared \
+            --disable-ffprobe --enable-ffmpeg \
+            --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-swresample \
             --enable-protocol=file \
-            --enable-whisper \
-            --enable-filter=whisper \
-            --enable-decoder=srt \
-            --enable-decoder=movtext \
-            --enable-decoder=webvtt \
-            --enable-decoder=ass \
-            --enable-decoder=ssa \
-            --enable-decoder=subrip \
-            --enable-encoder=srt \
-            --enable-encoder=subrip \
-            --enable-encoder=movtext \
-            --enable-demuxer=mov \
-            --enable-demuxer=matroska \
-            --enable-demuxer=ass \
-            --enable-demuxer=srt \
-            --enable-demuxer=webvtt \
-            --enable-demuxer=wav \
-            --enable-demuxer=mp3 \
-            --enable-demuxer=aac \
-            --enable-decoder=pcm_s16le \
-            --enable-decoder=mp3 \
-            --enable-decoder=aac \
+            --enable-whisper --enable-filter=whisper \
+            --enable-decoder=srt --enable-decoder=movtext --enable-decoder=webvtt \
+            --enable-decoder=ass --enable-decoder=ssa --enable-decoder=subrip \
+            --enable-encoder=srt --enable-encoder=subrip --enable-encoder=movtext \
+            --enable-demuxer=mov --enable-demuxer=matroska --enable-demuxer=ass \
+            --enable-demuxer=srt --enable-demuxer=webvtt \
+            --enable-demuxer=wav --enable-demuxer=mp3 --enable-demuxer=aac \
+            --enable-decoder=pcm_s16le --enable-decoder=mp3 --enable-decoder=aac \
             --enable-muxer=srt \
             --pkg-config-flags="--static" \
             --extra-cflags="-I/usr/local/include" \
-            --extra-ldflags="-L/usr/local/lib" > configure_stdout.txt 2> configure_stderr.txt
-          CONFIG_EXIT=$?
-          set -e
-          echo "=== configure 退出码: $CONFIG_EXIT ==="
-          echo "--- configure 标准输出 (末尾 40 行) ---"; tail -n 40 configure_stdout.txt || true
-          echo "--- configure 标准错误 (末尾 40 行) ---"; tail -n 40 configure_stderr.txt || true
-          if [ $CONFIG_EXIT -ne 0 ]; then
-            echo "=== 显示 ffbuild/config.log (末尾 120 行) ==="
-            if [ -f ffbuild/config.log ]; then
-              tail -n 120 ffbuild/config.log || true
-            else
-              echo "未找到 ffbuild/config.log"
-            fi
-            exit $CONFIG_EXIT
-          fi
-
-      - name: Build and install FFmpeg
-        shell: msys2 {0}
-        run: |
-          cd ffmpeg
-          # 获取 CPU 核心数，fallback 到 4
-          CORES=$(nproc 2>/dev/null || echo 4)
-          echo "使用 $CORES 个核心进行编译"
-          make -j$CORES
+            --extra-ldflags="-L/usr/local/lib"
+          make -j$(nproc)
           make install
 
-      - name: Test FFmpeg functionality
+      - name: Smoke Test (No OpenMP)
         shell: msys2 {0}
         run: |
-          echo "=== 测试 FFmpeg 基本功能 ==="
-          /usr/local/bin/ffmpeg.exe -version
-          
-          echo "=== 测试支持的编解码器 ==="
-          /usr/local/bin/ffmpeg.exe -encoders | grep -E "(srt|subrip|movtext)" || echo "没找到字幕编码器"
-          /usr/local/bin/ffmpeg.exe -decoders | grep -E "(srt|movtext|webvtt|ass|ssa)" || echo "没找到字幕解码器"
-          /usr/local/bin/ffmpeg.exe -decoders | grep -E "(mp3|aac|pcm_s16le)" || echo "没找到音频解码器"
-          
-          echo "=== 测试支持的格式 ==="
-          /usr/local/bin/ffmpeg.exe -formats | grep -E "(mov|matroska|srt|wav|mp3|aac)" || echo "没找到支持的格式"
-          
-          echo "=== 测试 Whisper 过滤器 ==="
-          /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || echo "Whisper 过滤器缺失"
+          /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || (echo 'Whisper filter missing' && exit 1)
+          /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E 'subrip' || echo 'subrip encoder missing'
 
-      - name: Copy dependencies
+      - name: Package Artifact (No OpenMP)
         shell: msys2 {0}
         run: |
-          mkdir -p /usr/local/bin/ffmpeg
-          cp /usr/local/bin/ffmpeg.exe /usr/local/bin/ffmpeg/
-          cp /mingw64/bin/libbz2-1.dll /usr/local/bin/ffmpeg/
-          cp /mingw64/bin/libiconv-2.dll /usr/local/bin/ffmpeg/
-          cp /mingw64/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
-          cp /mingw64/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
-          cp /mingw64/bin/zlib1.dll /usr/local/bin/ffmpeg/
+          DEST=/usr/local/bin/ffmpeg-no-omp
+          mkdir -p "$DEST"
+          cp /usr/local/bin/ffmpeg.exe "$DEST/"
+          cp /mingw64/bin/libbz2-1.dll "$DEST/" || true
+          cp /mingw64/bin/libiconv-2.dll "$DEST/" || true
+          cp /mingw64/bin/liblzma-5.dll "$DEST/" || true
+            cp /mingw64/bin/libwinpthread-1.dll "$DEST/" || true
+          cp /mingw64/bin/zlib1.dll "$DEST/" || true
+          cp /usr/local/lib/pkgconfig/whisper.pc "$DEST/" || true
+          cat > "$DEST/README-whisper.txt" << 'R'
+          FFmpeg + whisper filter (static, No OpenMP)
+          Usage example:
+            ffmpeg -i input.wav -filter:a "whisper=model=ggml-tiny.en.bin:task=transcribe" -f null -
+          Build flags: --enable-whisper --enable-filter=whisper (No OpenMP in ggml)
+          R
 
-
-
-      - name: Upload artifact
+      - name: Upload Artifact (No OpenMP)
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-windows
-          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg
+          name: ffmpeg-windows-no-openmp
+          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg-no-omp
+
+  build-omp:
+    name: Windows (OpenMP Enabled)
+    runs-on: windows-latest
+    steps:
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-yasm
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-iconv
+            zip
+            nasm
+            mingw-w64-x86_64-cmake
+            git
+
+      - name: Download FFmpeg source
+        run: |
+          git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg --depth 1
+
+      - name: Clone & Build whisper.cpp (OpenMP)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          PREFIX=/usr/local
+          git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
+          cd whisper.cpp
+          mkdir -p build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+                -DWHISPER_BUILD_TESTS=OFF \
+                -DWHISPER_BUILD_EXAMPLES=OFF \
+                -DWHISPER_BUILD_SHARED_LIB=OFF \
+                -DGGML_SHARED=OFF \
+                -DGGML_OPENMP=ON \
+                -DWHISPER_NO_ACCELERATE=ON \
+                -DBUILD_SHARED_LIBS=OFF \
+                ..
+          cmake --build . --config Release -j $(nproc)
+          cmake --install .
+          cd "${PREFIX}/lib"
+          if [ -f ggml.a ] && [ ! -f libggml.a ]; then mv ggml.a libggml.a; fi
+          for f in ggml-*.a; do [ -f "$f" ] && [ ! -f "lib$f" ] && mv "$f" "lib$f" || true; done
+          mkdir -p "${PREFIX}/lib/pkgconfig"
+          cat > "${PREFIX}/lib/pkgconfig/whisper.pc" << 'EOF'
+          prefix=/usr/local
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
+
+          Name: whisper
+          Description: Port of OpenAI's Whisper model in C/C++ (OpenMP enabled)
+          Version: 1.8.0
+          Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base -lgomp
+          Libs.private: -lstdc++ -lm -lpthread -lgomp
+          Cflags: -I${includedir} -fopenmp
+          EOF
+          cp "${PREFIX}/lib/pkgconfig/whisper.pc" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
+
+      - name: Configure FFmpeg (OpenMP)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+          pkg-config --exists whisper || (echo 'whisper.pc missing' && exit 1)
+          echo "whisper version: $(pkg-config --modversion whisper)"
+          echo '#include <whisper.h>\nint main(){return !!whisper_init_from_file_with_params;}' > test.c
+          g++ $(pkg-config --cflags whisper) test.c $(pkg-config --libs whisper) -o /tmp/t || (echo 'link fail' && exit 1)
+          rm -f test.c /tmp/t
+          cd ffmpeg
+          ./configure --disable-everything \
+            --enable-static --disable-shared \
+            --disable-ffprobe --enable-ffmpeg \
+            --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-swresample \
+            --enable-protocol=file \
+            --enable-whisper --enable-filter=whisper \
+            --enable-decoder=srt --enable-decoder=movtext --enable-decoder=webvtt \
+            --enable-decoder=ass --enable-decoder=ssa --enable-decoder=subrip \
+            --enable-encoder=srt --enable-encoder=subrip --enable-encoder=movtext \
+            --enable-demuxer=mov --enable-demuxer=matroska --enable-demuxer=ass \
+            --enable-demuxer=srt --enable-demuxer=webvtt \
+            --enable-demuxer=wav --enable-demuxer=mp3 --enable-demuxer=aac \
+            --enable-decoder=pcm_s16le --enable-decoder=mp3 --enable-decoder=aac \
+            --enable-muxer=srt \
+            --pkg-config-flags="--static" \
+            --extra-cflags="-I/usr/local/include" \
+            --extra-ldflags="-L/usr/local/lib"
+          make -j$(nproc)
+          make install
+
+      - name: Smoke Test (OpenMP)
+        shell: msys2 {0}
+        run: |
+          /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || (echo 'Whisper filter missing' && exit 1)
+          /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E 'subrip' || echo 'subrip encoder missing'
+
+      - name: Package Artifact (OpenMP)
+        shell: msys2 {0}
+        run: |
+          DEST=/usr/local/bin/ffmpeg-omp
+          mkdir -p "$DEST"
+          cp /usr/local/bin/ffmpeg.exe "$DEST/"
+          cp /mingw64/bin/libbz2-1.dll "$DEST/" || true
+          cp /mingw64/bin/libiconv-2.dll "$DEST/" || true
+          cp /mingw64/bin/liblzma-5.dll "$DEST/" || true
+          cp /mingw64/bin/libwinpthread-1.dll "$DEST/" || true
+          cp /mingw64/bin/zlib1.dll "$DEST/" || true
+          cp /usr/local/lib/pkgconfig/whisper.pc "$DEST/" || true
+          cat > "$DEST/README-whisper.txt" << 'R'
+          FFmpeg + whisper filter (static, OpenMP enabled)
+          Usage example:
+            ffmpeg -i input.wav -filter:a "whisper=model=ggml-tiny.en.bin:task=transcribe" -f null -
+          Build flags: --enable-whisper --enable-filter=whisper (ggml with OpenMP)
+          R
+
+      - name: Upload Artifact (OpenMP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows-openmp
+          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg-omp
+
