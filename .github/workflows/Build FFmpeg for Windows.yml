@@ -87,25 +87,19 @@ jobs:
             LIBS_LINE="$LIBS_LINE -lggml"
           fi
           
-          # 关键修复：创建完整的whisper.pc文件，确保路径格式正确
-          cat > "$PC_FILE" << 'EOF'
-          prefix=/usr/local
-          exec_prefix=${prefix}
-          libdir=${exec_prefix}/lib
-          includedir=${prefix}/include
+          # 关键修复：创建完整的whisper.pc文件，参考macOS版本格式
+          cat > "$PC_FILE" << EOF
+          prefix=${PREFIX}
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${prefix}/include
 
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          EOF
-          
-          # 动态添加Libs行
-          echo "Libs: $LIBS_LINE" >> "$PC_FILE"
-          
-          # 添加其余内容
-          cat >> "$PC_FILE" << 'EOF'
+          Libs: -L\${libdir} -lwhisper -lggml
           Libs.private: -lm -pthread -lstdc++
-          Cflags: -I${includedir}
+          Cflags: -I\${includedir}
           EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
