@@ -59,19 +59,19 @@ jobs:
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 关键修复：确保使用Unix路径格式，不使用变量替换
+          # 关键修复：使用绝对路径避免Windows路径问题
           cat > "$PC_FILE" << 'EOF'
           prefix=/usr/local
-          exec_prefix=${prefix}
-          libdir=${exec_prefix}/lib
-          includedir=${prefix}/include
-          
+          exec_prefix=/usr/local
+          libdir=/usr/local/lib
+          includedir=/usr/local/include
+
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          Libs: -L${libdir} -lwhisper -lggml
+          Libs: -L/usr/local/lib -lwhisper -lggml
           Libs.private: -lm -pthread -lstdc++
-          Cflags: -I${includedir}
+          Cflags: -I/usr/local/include
           EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
