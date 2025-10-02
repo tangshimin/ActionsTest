@@ -75,7 +75,15 @@ jobs:
           export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
           pkg-config --exists whisper || (echo 'whisper.pc missing' && exit 1)
           echo "whisper version: $(pkg-config --modversion whisper)"
-          echo '#include <whisper.h>\nint main(){return !!whisper_init_from_file_with_params;}' > test.c
+          # 生成测试源码（使用 heredoc，避免 echo 中的 \n 变成字面字符串导致 main 未识别）
+          cat > test.c <<'EOF'
+          #include <whisper.h>
+          int main(void) {
+              /* 引用符号以确保链接阶段解析 */
+              (void) whisper_init_from_file_with_params;
+              return 0;
+          }
+          EOF
           g++ $(pkg-config --cflags whisper) test.c $(pkg-config --libs whisper) -o /tmp/t || (echo 'link fail' && exit 1)
           rm -f test.c /tmp/t
           cd ffmpeg
@@ -200,7 +208,13 @@ jobs:
           export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
           pkg-config --exists whisper || (echo 'whisper.pc missing' && exit 1)
           echo "whisper version: $(pkg-config --modversion whisper)"
-          echo '#include <whisper.h>\nint main(){return !!whisper_init_from_file_with_params;}' > test.c
+          cat > test.c <<'EOF'
+          #include <whisper.h>
+          int main(void) {
+              (void) whisper_init_from_file_with_params;
+              return 0;
+          }
+          EOF
           g++ $(pkg-config --cflags whisper) test.c $(pkg-config --libs whisper) -o /tmp/t || (echo 'link fail' && exit 1)
           rm -f test.c /tmp/t
           cd ffmpeg
