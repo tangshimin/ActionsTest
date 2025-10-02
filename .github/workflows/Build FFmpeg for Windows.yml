@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-no-omp:
-    name: Windows (No OpenMP)
+  build:
+    name: Windows
     runs-on: windows-latest
     steps:
       - name: Install MSYS2
@@ -28,141 +28,7 @@ jobs:
         run: |
           git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg --depth 1
 
-      - name: Clone & Build whisper.cpp (No OpenMP)
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          PREFIX=/usr/local
-          git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
-          cd whisper.cpp
-          mkdir -p build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-                -DWHISPER_BUILD_TESTS=OFF \
-                -DWHISPER_BUILD_EXAMPLES=OFF \
-                -DWHISPER_BUILD_SHARED_LIB=OFF \
-                -DGGML_SHARED=OFF \
-                -DGGML_OPENMP=OFF \
-                -DWHISPER_NO_ACCELERATE=ON \
-                -DBUILD_SHARED_LIBS=OFF \
-                ..
-          cmake --build . --config Release -j $(nproc)
-          cmake --install .
-          cd "${PREFIX}/lib"
-          # 统一库前缀
-          if [ -f ggml.a ] && [ ! -f libggml.a ]; then mv ggml.a libggml.a; fi
-          for f in ggml-*.a; do [ -f "$f" ] && [ ! -f "lib$f" ] && mv "$f" "lib$f" || true; done
-          mkdir -p "${PREFIX}/lib/pkgconfig"
-          cat > "${PREFIX}/lib/pkgconfig/whisper.pc" << 'EOF'
-          prefix=/usr/local
-          exec_prefix=${prefix}
-          libdir=${exec_prefix}/lib
-          includedir=${prefix}/include
-
-          Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++ (No OpenMP)
-          Version: 1.8.0
-          Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base
-          Libs.private: -lstdc++ -lm -lpthread
-          Cflags: -I${includedir}
-          EOF
-          cp "${PREFIX}/lib/pkgconfig/whisper.pc" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
-
-      - name: Configure FFmpeg (No OpenMP)
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-          pkg-config --exists whisper || (echo 'whisper.pc missing' && exit 1)
-          echo "whisper version: $(pkg-config --modversion whisper)"
-          # 生成测试源码（使用 heredoc，避免 echo 中的 \n 变成字面字符串导致 main 未识别）
-          cat > test.c <<'EOF'
-          #include <whisper.h>
-          int main(void) {
-              /* 引用符号以确保链接阶段解析 */
-              (void) whisper_init_from_file_with_params;
-              return 0;
-          }
-          EOF
-          g++ $(pkg-config --cflags whisper) test.c $(pkg-config --libs whisper) -o /tmp/t || (echo 'link fail' && exit 1)
-          rm -f test.c /tmp/t
-          cd ffmpeg
-          ./configure --disable-everything \
-            --enable-static --disable-shared \
-            --disable-ffprobe --enable-ffmpeg \
-            --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-swresample \
-            --enable-protocol=file \
-            --enable-whisper --enable-filter=whisper \
-            --enable-decoder=srt --enable-decoder=movtext --enable-decoder=webvtt \
-            --enable-decoder=ass --enable-decoder=ssa --enable-decoder=subrip \
-            --enable-encoder=srt --enable-encoder=subrip --enable-encoder=movtext \
-            --enable-demuxer=mov --enable-demuxer=matroska --enable-demuxer=ass \
-            --enable-demuxer=srt --enable-demuxer=webvtt \
-            --enable-demuxer=wav --enable-demuxer=mp3 --enable-demuxer=aac \
-            --enable-decoder=pcm_s16le --enable-decoder=mp3 --enable-decoder=aac \
-            --enable-muxer=srt \
-            --pkg-config-flags="--static" \
-            --extra-cflags="-I/usr/local/include" \
-            --extra-ldflags="-L/usr/local/lib"
-          make -j$(nproc)
-          make install
-
-      - name: Smoke Test (No OpenMP)
-        shell: msys2 {0}
-        run: |
-          /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || (echo 'Whisper filter missing' && exit 1)
-          /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E 'subrip' || echo 'subrip encoder missing'
-
-      - name: Package Artifact (No OpenMP)
-        shell: msys2 {0}
-        run: |
-          DEST=/usr/local/bin/ffmpeg-no-omp
-          mkdir -p "$DEST"
-          cp /usr/local/bin/ffmpeg.exe "$DEST/"
-          cp /mingw64/bin/libbz2-1.dll "$DEST/" || true
-          cp /mingw64/bin/libiconv-2.dll "$DEST/" || true
-          cp /mingw64/bin/liblzma-5.dll "$DEST/" || true
-            cp /mingw64/bin/libwinpthread-1.dll "$DEST/" || true
-          cp /mingw64/bin/zlib1.dll "$DEST/" || true
-          cp /usr/local/lib/pkgconfig/whisper.pc "$DEST/" || true
-          cat > "$DEST/README-whisper.txt" << 'R'
-          FFmpeg + whisper filter (static, No OpenMP)
-          Usage example:
-            ffmpeg -i input.wav -filter:a "whisper=model=ggml-tiny.en.bin:task=transcribe" -f null -
-          Build flags: --enable-whisper --enable-filter=whisper (No OpenMP in ggml)
-          R
-
-      - name: Upload Artifact (No OpenMP)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-windows-no-openmp
-          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg-no-omp
-
-  build-omp:
-    name: Windows (OpenMP Enabled)
-    runs-on: windows-latest
-    steps:
-      - name: Install MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-yasm
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-iconv
-            zip
-            nasm
-            mingw-w64-x86_64-cmake
-            git
-
-      - name: Download FFmpeg source
-        run: |
-          git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg --depth 1
-
-      - name: Clone & Build whisper.cpp (OpenMP)
+      - name: Clone & Build whisper.cpp
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -193,7 +59,7 @@ jobs:
           includedir=${prefix}/include
 
           Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++ (OpenMP enabled)
+          Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
           Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base -lgomp
           Libs.private: -lstdc++ -lm -lpthread -lgomp
@@ -201,7 +67,7 @@ jobs:
           EOF
           cp "${PREFIX}/lib/pkgconfig/whisper.pc" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
 
-      - name: Configure FFmpeg (OpenMP)
+      - name: Configure FFmpeg
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -238,16 +104,16 @@ jobs:
           make -j$(nproc)
           make install
 
-      - name: Smoke Test (OpenMP)
+      - name: Smoke Test
         shell: msys2 {0}
         run: |
           /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || (echo 'Whisper filter missing' && exit 1)
           /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E 'subrip' || echo 'subrip encoder missing'
 
-      - name: Package Artifact (OpenMP)
+      - name: Package Artifact
         shell: msys2 {0}
         run: |
-          DEST=/usr/local/bin/ffmpeg-omp
+          DEST=/usr/local/bin/ffmpeg-build
           mkdir -p "$DEST"
           cp /usr/local/bin/ffmpeg.exe "$DEST/"
           cp /mingw64/bin/libbz2-1.dll "$DEST/" || true
@@ -257,15 +123,15 @@ jobs:
           cp /mingw64/bin/zlib1.dll "$DEST/" || true
           cp /usr/local/lib/pkgconfig/whisper.pc "$DEST/" || true
           cat > "$DEST/README-whisper.txt" << 'R'
-          FFmpeg + whisper filter (static, OpenMP enabled)
+          FFmpeg + whisper filter (static build)
           Usage example:
             ffmpeg -i input.wav -filter:a "whisper=model=ggml-tiny.en.bin:task=transcribe" -f null -
-          Build flags: --enable-whisper --enable-filter=whisper (ggml with OpenMP)
+          Build flags: --enable-whisper --enable-filter=whisper
+          Limit threads (example 6): set OMP_NUM_THREADS=6 (CMD) / export OMP_NUM_THREADS=6 (bash)
           R
 
-      - name: Upload Artifact (OpenMP)
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-windows-openmp
-          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg-omp
-
+          name: ffmpeg-windows
+          path: D:\a\_temp\msys64\usr\local\bin\ffmpeg-build
