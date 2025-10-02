@@ -59,29 +59,37 @@ jobs:
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 关键修复：使用绝对路径避免Windows路径问题
+          # 关键修复：创建完整的whisper.pc文件
           cat > "$PC_FILE" << 'EOF'
-          prefix=/usr/local
-          exec_prefix=/usr/local
-          libdir=/usr/local/lib
-          includedir=/usr/local/include
+prefix=/usr/local
+exec_prefix=/usr/local
+libdir=/usr/local/lib
+includedir=/usr/local/include
 
-          Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++
-          Version: 1.8.0
-          Libs: -L/usr/local/lib -lwhisper -lggml
-          Libs.private: -lm -pthread -lstdc++
-          Cflags: -I/usr/local/include
-          EOF
+Name: whisper
+Description: Port of OpenAI's Whisper model in C/C++
+Version: 1.8.0
+Libs: -L/usr/local/lib -lwhisper -lggml
+Libs.private: -lm -pthread -lstdc++
+Cflags: -I/usr/local/include
+EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
           cat "$PC_FILE"
+          
+          echo "=== 验证 whisper.pc 文件格式 ==="
+          hexdump -C "$PC_FILE" | head -10 || true
 
       - name: Configure FFmpeg
         shell: msys2 {0}
         run: |
           cd ffmpeg
           export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          
+          # 验证库文件是否存在
+          echo "=== 验证库文件存在性 ==="
+          ls -la /usr/local/lib/libwhisper* || echo "whisper库不存在"
+          ls -la /usr/local/lib/libggml* || echo "ggml库不存在"
           
           # 调试 pkg-config 设置
           echo "=== 调试 pkg-config ==="
@@ -94,6 +102,13 @@ jobs:
           pkg-config --modversion whisper || echo "无法获取版本"
           pkg-config --cflags whisper || echo "无法获取编译标志"
           pkg-config --libs whisper || echo "无法获取链接标志"
+          
+          # 测试链接是否工作
+          echo "=== 测试链接 ==="
+          echo '#include <whisper.h>' > test_whisper.c
+          echo 'int main() { return 0; }' >> test_whisper.c
+          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --libs whisper) -o test_whisper && echo "✓ 编译测试成功" || echo "✗ 编译测试失败"
+          rm -f test_whisper.c test_whisper
           
           ./configure --disable-everything \
             --enable-static \
@@ -170,8 +185,8 @@ jobs:
           cp /mingw64/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/zlib1.dll /usr/local/bin/ffmpeg/
-
-
+      
+      
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
