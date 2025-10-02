@@ -19,22 +19,95 @@ jobs:
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-zlib
             mingw-w64-x86_64-iconv
-            mingw-w64-x86_64-bzip2
             zip
             nasm
-
-      - name: Check iconv installation
-        run: where iconv
+            mingw-w64-x86_64-cmake
+            git
 
       - name: Download FFmpeg source code
         run: |
           git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
-          cd ffmpeg
+
+      - name: Clone & Build whisper.cpp
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          PREFIX="/usr/local"
+          git clone https://github.com/ggerganov/whisper.cpp.git
+          cd whisper.cpp
+          mkdir -p build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+                -DWHISPER_BUILD_TESTS=OFF \
+                -DWHISPER_BUILD_EXAMPLES=OFF \
+                -DWHISPER_BUILD_SHARED_LIB=OFF \
+                -DGGML_SHARED=OFF \
+                -DWHISPER_NO_ACCELERATE=ON \
+                -DBUILD_SHARED_LIBS=OFF \
+                ..
+          cmake --build . --config Release -j $(nproc)
+          cmake --install .
+          
+          # 验证安装 - 查看实际安装的库文件
+          echo "=== 查看安装的静态库 ==="
+          find "${PREFIX}/lib" -name "*.a" | sort || true
+          
+          echo "=== 查看头文件 ==="
+          find "${PREFIX}/include" -name "*.h" | head -10 || true
+          
+          # 创建正确的 whisper.pc 文件（针对Windows修复）
+          PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
+          mkdir -p "${PREFIX}/lib/pkgconfig"
+          
+          # 检查实际存在的库文件来确定正确的库名
+          ACTUAL_LIBS=""
+          if [ -f "${PREFIX}/lib/libwhisper.a" ]; then
+            ACTUAL_LIBS="$ACTUAL_LIBS -lwhisper"
+          fi
+          if [ -f "${PREFIX}/lib/libggml.a" ]; then
+            ACTUAL_LIBS="$ACTUAL_LIBS -lggml"
+          fi
+          if [ -f "${PREFIX}/lib/libggml-base.a" ]; then
+            ACTUAL_LIBS="$ACTUAL_LIBS -lggml-base"
+          fi
+          
+          echo "实际找到的库: $ACTUAL_LIBS"
+          
+          cat > "$PC_FILE" << EOF
+          prefix=${PREFIX}
+          exec_prefix=\${prefix}
+          libdir=\${exec_prefix}/lib
+          includedir=\${prefix}/include
+
+          Name: whisper
+          Description: Port of OpenAI's Whisper model in C/C++
+          Version: 1.8.0
+          Libs: -L\${libdir}${ACTUAL_LIBS}
+          Libs.private: -lm -pthread -lstdc++
+          Cflags: -I\${includedir}
+          EOF
+          
+          echo "=== 生成的 whisper.pc 内容 ==="
+          cat "$PC_FILE"
 
       - name: Configure FFmpeg
         shell: msys2 {0}
         run: |
           cd ffmpeg
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          
+          # 调试 pkg-config 设置
+          echo "=== 调试 pkg-config ==="
+          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+          ls -la /usr/local/lib/pkgconfig/ || true
+          
+          # 测试 pkg-config
+          echo "=== 测试 pkg-config whisper ==="
+          pkg-config --exists whisper && echo "✓ whisper package found" || echo "✗ whisper package not found"
+          pkg-config --modversion whisper || echo "无法获取版本"
+          pkg-config --cflags whisper || echo "无法获取编译标志"
+          pkg-config --libs whisper || echo "无法获取链接标志"
+          
           ./configure --disable-everything \
             --enable-static \
             --disable-shared \
@@ -43,6 +116,11 @@ jobs:
             --enable-avformat \
             --enable-avcodec \
             --enable-avutil \
+            --enable-avfilter \
+            --enable-swresample \
+            --enable-protocol=file \
+            --enable-whisper \
+            --enable-filter=whisper \
             --enable-decoder=srt \
             --enable-decoder=movtext \
             --enable-decoder=webvtt \
@@ -57,15 +135,43 @@ jobs:
             --enable-demuxer=ass \
             --enable-demuxer=srt \
             --enable-demuxer=webvtt \
+            --enable-demuxer=wav \
+            --enable-demuxer=mp3 \
+            --enable-demuxer=aac \
+            --enable-decoder=pcm_s16le \
+            --enable-decoder=mp3 \
+            --enable-decoder=aac \
             --enable-muxer=srt \
-            --enable-protocol=file \
+            --pkg-config-flags="--static" \
+            --extra-cflags="-I/usr/local/include" \
+            --extra-ldflags="-L/usr/local/lib"
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
         run: |
           cd ffmpeg
-          make
+          # 获取 CPU 核心数，fallback 到 4
+          CORES=$(nproc 2>/dev/null || echo 4)
+          echo "使用 $CORES 个核心进行编译"
+          make -j$CORES
           make install
+
+      - name: Test FFmpeg functionality
+        shell: msys2 {0}
+        run: |
+          echo "=== 测试 FFmpeg 基本功能 ==="
+          /usr/local/bin/ffmpeg.exe -version
+          
+          echo "=== 测试支持的编解码器 ==="
+          /usr/local/bin/ffmpeg.exe -encoders | grep -E "(srt|subrip|movtext)" || echo "没找到字幕编码器"
+          /usr/local/bin/ffmpeg.exe -decoders | grep -E "(srt|movtext|webvtt|ass|ssa)" || echo "没找到字幕解码器"
+          /usr/local/bin/ffmpeg.exe -decoders | grep -E "(mp3|aac|pcm_s16le)" || echo "没找到音频解码器"
+          
+          echo "=== 测试支持的格式 ==="
+          /usr/local/bin/ffmpeg.exe -formats | grep -E "(mov|matroska|srt|wav|mp3|aac)" || echo "没找到支持的格式"
+          
+          echo "=== 测试 Whisper 过滤器 ==="
+          /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || echo "Whisper 过滤器缺失"
 
       - name: Copy dependencies
         shell: msys2 {0}
@@ -77,6 +183,7 @@ jobs:
           cp /mingw64/bin/liblzma-5.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/libwinpthread-1.dll /usr/local/bin/ffmpeg/
           cp /mingw64/bin/zlib1.dll /usr/local/bin/ffmpeg/
+
 
 
       - name: Upload artifact
