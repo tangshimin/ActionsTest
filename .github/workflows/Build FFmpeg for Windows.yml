@@ -81,29 +81,30 @@ jobs:
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 检查实际存在的库文件来确定正确的库名
-          LIBS_LINE="-L\${libdir} -lwhisper"
-          if [ -f "${PREFIX}/lib/libggml.a" ]; then
-            LIBS_LINE="$LIBS_LINE -lggml"
-          fi
-          
           # 关键修复：创建完整的whisper.pc文件，完全参考macOS版本格式
-          cat > "$PC_FILE" << EOF
-          prefix=${PREFIX}
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
+          # 注意：下面 heredoc 内容必须保持与前面脚本同级缩进, 否则 GitHub Actions YAML 会解析失败
+          cat > "$PC_FILE" << 'EOF'
+          prefix=/usr/local
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
 
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          Libs: -L\${libdir} -lwhisper -lggml -lggml-cpu -lggml-base
-          Libs.private: -lm -pthread -lstdc++
-          Cflags: -I\${includedir}
+          Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base -lstdc++ -lpthread -lm
+          Libs.private: -lstdc++ -lpthread -lm
+          Cflags: -I${includedir}
+          Requires.private:
           EOF
+          
+          # 兼容性：某些 configure 可能用模块名 libwhisper，这里复制一份
+          cp "$PC_FILE" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
           
           echo "=== 生成的 whisper.pc 内容 ==="
           cat "$PC_FILE"
+          echo "=== 生成的 libwhisper.pc 内容 (兼容) ==="
+          cat "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
           
           echo "=== 验证 whisper.pc 文件格式 ==="
           hexdump -C "$PC_FILE" | head -10 || true
@@ -111,6 +112,7 @@ jobs:
       - name: Configure FFmpeg
         shell: msys2 {0}
         run: |
+          set -e
           cd ffmpeg
           export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
           
@@ -119,25 +121,84 @@ jobs:
           ls -la /usr/local/lib/libwhisper* || echo "whisper库不存在"
           ls -la /usr/local/lib/libggml* || echo "ggml库不存在"
           
+          # 额外调试：显示 whisper.pc 原始内容 (去掉缩进检查)
+          echo "=== whisper.pc 内容 (原始) ==="
+          sed -n '1,120p' /usr/local/lib/pkgconfig/whisper.pc || true
+          echo "=== whisper.pc 十六进制前 3 行 ==="; hexdump -C /usr/local/lib/pkgconfig/whisper.pc | head -n 3 || true
+          
           # 调试 pkg-config 设置
           echo "=== 调试 pkg-config ==="
           echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
           ls -la /usr/local/lib/pkgconfig/ || true
           
-          # 测试 pkg-config
-          echo "=== 测试 pkg-config whisper ==="
+          # 符号检查 (libwhisper)
+          echo "=== 符号检查 (libwhisper) ==="
+          if command -v nm >/dev/null 2>&1; then
+            nm -g --defined-only /usr/local/lib/libwhisper.a | head -n 40 || true
+          else
+            echo "nm 不可用"
+          fi
+          
+          # 基础测试
+          echo "=== 测试 pkg-config whisper (基本) ==="
           pkg-config --exists whisper && echo "✓ whisper package found" || echo "✗ whisper package not found"
-          pkg-config --modversion whisper || echo "无法获取版本"
-          pkg-config --cflags whisper || echo "无法获取编译标志"
-          pkg-config --libs whisper || echo "无法获取链接标志"
+          echo -n "Version: "; pkg-config --modversion whisper || echo "(获取失败)"
+          echo -n "Cflags: "; pkg-config --cflags whisper || echo "(获取失败)"
+          echo -n "Libs:   "; pkg-config --libs whisper || echo "(获取失败)"
+          echo -n "Libs --static: "; pkg-config --static --libs whisper || echo "(获取失败)"
           
-          # 测试链接是否工作
-          echo "=== 测试链接 ==="
-          echo '#include <whisper.h>' > test_whisper.c
-          echo 'int main() { return 0; }' >> test_whisper.c
-          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --libs whisper) -o test_whisper && echo "✓ 编译测试成功" || echo "✗ 编译测试失败"
-          rm -f test_whisper.c test_whisper
+          # 版本约束测试
+          echo "=== 版本约束测试 (whisper >= 1.7.5) ==="
+          if pkg-config --exists "whisper >= 1.7.5"; then
+            echo "✓ 版本约束检测通过"
+          else
+            RC=$?
+            echo "✗ 版本约束检测失败 (pkg-config exit=${RC})"
+            echo "--- pkg-config --debug 输出 ---"
+            PKG_CONFIG_DEBUG_SPEW=1 pkg-config --exists "whisper >= 1.7.5" 2>&1 || true
+          fi
           
+          # 构造更严格/宽松的测试
+            echo "=== 版本边界测试 ==="
+          for v in 1.7.4 1.7.5 1.8.0 2.0.0; do
+            if pkg-config --exists "whisper >= $v"; then
+              echo "whisper >= $v : OK"
+            else
+              echo "whisper >= $v : FAIL"
+            fi
+          done
+          
+          # 编译链接测试（静态与动态）
+          echo "=== 编译/链接测试 ==="
+          cat > test_whisper.c <<'SRC'
+          #include <whisper.h>
+          #include <stdio.h>
+          int main(){
+            struct whisper_context * ctx = whisper_init_from_file("/dev/null");
+            if(!ctx){
+              fprintf(stderr, "ctx null (expected on Windows path)\n");
+            } else {
+              whisper_free(ctx);
+            }
+            struct whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+            (void)p.print_progress;
+            return 0;
+          }
+          SRC
+          set -x
+          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --libs whisper) -o test_whisper_dyn && echo "✓ 动态链接测试成功" || echo "✗ 动态链接测试失败"
+          gcc $(pkg-config --cflags whisper) test_whisper.c $(pkg-config --static --libs whisper) -o test_whisper_static && echo "✓ 静态链接测试成功" || echo "✗ 静态链接测试失败"
+          set +x
+          rm -f test_whisper.c test_whisper_dyn test_whisper_static
+          
+          # 如果版本约束失败, 在此直接停止并提示
+          if ! pkg-config --exists "whisper >= 1.7.5"; then
+            echo "ERROR: pkg-config 版本检测失败, 终止以避免误导性 configure 错误" >&2
+            exit 1
+          fi
+          
+          echo "=== 进入 FFmpeg configure 阶段 ==="
+          set +e
           ./configure --disable-everything \
             --enable-static \
             --disable-shared \
@@ -174,7 +235,21 @@ jobs:
             --enable-muxer=srt \
             --pkg-config-flags="--static" \
             --extra-cflags="-I/usr/local/include" \
-            --extra-ldflags="-L/usr/local/lib"
+            --extra-ldflags="-L/usr/local/lib" > configure_stdout.txt 2> configure_stderr.txt
+          CONFIG_EXIT=$?
+          set -e
+          echo "=== configure 退出码: $CONFIG_EXIT ==="
+          echo "--- configure 标准输出 (末尾 40 行) ---"; tail -n 40 configure_stdout.txt || true
+          echo "--- configure 标准错误 (末尾 40 行) ---"; tail -n 40 configure_stderr.txt || true
+          if [ $CONFIG_EXIT -ne 0 ]; then
+            echo "=== 显示 ffbuild/config.log (末尾 120 行) ==="
+            if [ -f ffbuild/config.log ]; then
+              tail -n 120 ffbuild/config.log || true
+            else
+              echo "未找到 ffbuild/config.log"
+            fi
+            exit $CONFIG_EXIT
+          fi
 
       - name: Build and install FFmpeg
         shell: msys2 {0}
