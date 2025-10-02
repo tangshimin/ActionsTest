@@ -59,32 +59,19 @@ jobs:
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 检查实际存在的库文件来确定正确的库名
-          ACTUAL_LIBS=""
-          if [ -f "${PREFIX}/lib/libwhisper.a" ]; then
-            ACTUAL_LIBS="$ACTUAL_LIBS -lwhisper"
-          fi
-          if [ -f "${PREFIX}/lib/libggml.a" ]; then
-            ACTUAL_LIBS="$ACTUAL_LIBS -lggml"
-          fi
-          if [ -f "${PREFIX}/lib/libggml-base.a" ]; then
-            ACTUAL_LIBS="$ACTUAL_LIBS -lggml-base"
-          fi
+          # 关键修复：确保使用Unix路径格式，不使用变量替换
+          cat > "$PC_FILE" << 'EOF'
+          prefix=/usr/local
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
           
-          echo "实际找到的库: $ACTUAL_LIBS"
-          
-          cat > "$PC_FILE" << EOF
-          prefix=${PREFIX}
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
-
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          Libs: -L\${libdir}${ACTUAL_LIBS}
+          Libs: -L${libdir} -lwhisper -lggml
           Libs.private: -lm -pthread -lstdc++
-          Cflags: -I\${includedir}
+          Cflags: -I${includedir}
           EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
