@@ -52,6 +52,28 @@ jobs:
           echo "=== 查看安装的静态库 ==="
           find "${PREFIX}/lib" -name "*.a" | sort || true
           
+          # 修复库文件命名问题
+          echo "=== 修复库文件命名 ==="
+          cd "${PREFIX}/lib"
+          # 将 ggml.a 重命名为 libggml.a 以符合链接器期望
+          if [ -f "ggml.a" ] && [ ! -f "libggml.a" ]; then
+            mv ggml.a libggml.a
+            echo "✓ 重命名 ggml.a -> libggml.a"
+          fi
+          # 检查其他可能的ggml库文件
+          for file in ggml-*.a; do
+            if [ -f "$file" ]; then
+              newname="lib${file}"
+              if [ ! -f "$newname" ]; then
+                mv "$file" "$newname"
+                echo "✓ 重命名 $file -> $newname"
+              fi
+            fi
+          done
+          
+          echo "=== 最终库文件列表 ==="
+          ls -la lib*.a || true
+          
           echo "=== 查看头文件 ==="
           find "${PREFIX}/include" -name "*.h" | head -10 || true
           
@@ -59,19 +81,31 @@ jobs:
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 关键修复：创建完整的whisper.pc文件
-          cat > "$PC_FILE" << EOF
-          prefix=${PREFIX}
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
+          # 检查实际存在的库文件来确定正确的库名
+          LIBS_LINE="-L\${libdir} -lwhisper"
+          if [ -f "${PREFIX}/lib/libggml.a" ]; then
+            LIBS_LINE="$LIBS_LINE -lggml"
+          fi
+          
+          # 关键修复：创建完整的whisper.pc文件，确保路径格式正确
+          cat > "$PC_FILE" << 'EOF'
+          prefix=/usr/local
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
 
           Name: whisper
           Description: Port of OpenAI's Whisper model in C/C++
           Version: 1.8.0
-          Libs: -L\${libdir} -lwhisper -lggml
+          EOF
+          
+          # 动态添加Libs行
+          echo "Libs: $LIBS_LINE" >> "$PC_FILE"
+          
+          # 添加其余内容
+          cat >> "$PC_FILE" << 'EOF'
           Libs.private: -lm -pthread -lstdc++
-          Cflags: -I\${includedir}
+          Cflags: -I${includedir}
           EOF
           
           echo "=== 生成的 whisper.pc 内容 ==="
