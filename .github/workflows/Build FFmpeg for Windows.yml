@@ -43,13 +43,14 @@ jobs:
                 -DWHISPER_BUILD_SHARED_LIB=OFF \
                 -DGGML_SHARED=OFF \
                 -DWHISPER_NO_ACCELERATE=ON \
+                -DGGML_OPENMP=OFF \
                 -DBUILD_SHARED_LIBS=OFF \
                 ..
           cmake --build . --config Release -j $(nproc)
           cmake --install .
           
-          # 验证安装 - 查看实际安装的库文件
-          echo "=== 查看安装的静态库 ==="
+          # 验证安装 - 查看实际安装的静态库 (已禁用 OpenMP 以避免 GOMP_* 链接错误)
+          echo "=== 查看安装的静态库 (OpenMP disabled) ==="
           find "${PREFIX}/lib" -name "*.a" | sort || true
           
           # 修复库文件命名问题
@@ -77,12 +78,11 @@ jobs:
           echo "=== 查看头文件 ==="
           find "${PREFIX}/include" -name "*.h" | head -10 || true
           
-          # 创建正确的 whisper.pc 文件（针对Windows修复）
+          # 创建正确的 whisper.pc 文件（针对Windows修复，禁用OpenMP不需要 -lgomp）
           PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
           mkdir -p "${PREFIX}/lib/pkgconfig"
           
-          # 关键修复：创建完整的whisper.pc文件，完全参考macOS版本格式
-          # 注意：下面 heredoc 内容必须保持与前面脚本同级缩进, 否则 GitHub Actions YAML 会解析失败
+          # 关键修复：创建完整的whisper.pc文件，去掉缩进，禁用OpenMP避免 GOMP_* 未解析
           cat > "$PC_FILE" << 'EOF'
           prefix=/usr/local
           exec_prefix=${prefix}
@@ -90,7 +90,7 @@ jobs:
           includedir=${prefix}/include
 
           Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++
+          Description: Port of OpenAI's Whisper model in C/C++ (OpenMP disabled)
           Version: 1.8.0
           Libs: -L${libdir} -lwhisper -lggml -lggml-cpu -lggml-base -lstdc++ -lpthread -lm
           Libs.private: -lstdc++ -lpthread -lm
@@ -98,7 +98,7 @@ jobs:
           Requires.private:
           EOF
           
-          # 兼容性：某些 configure 可能用模块名 libwhisper，这里复制一份
+          # 兼容性：复制为 libwhisper.pc
           cp "$PC_FILE" "${PREFIX}/lib/pkgconfig/libwhisper.pc" || true
           
           echo "=== 生成的 whisper.pc 内容 ==="
