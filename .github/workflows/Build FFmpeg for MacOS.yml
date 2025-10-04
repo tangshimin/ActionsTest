@@ -89,6 +89,8 @@ jobs:
             --enable-avformat \
             --enable-avfilter \
             --enable-swresample \
+            --enable-filter=aresample \
+            --enable-filter=aformat \
             --enable-protocol=file \
             --enable-static \
             --disable-shared \
