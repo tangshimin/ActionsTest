@@ -85,19 +85,50 @@ jobs:
           rm -f test.c /tmp/t
           cd ffmpeg
           ./configure --disable-everything \
-            --enable-static --disable-shared \
-            --disable-ffprobe --enable-ffmpeg \
-            --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-swresample \
+            --disable-ffprobe \
+            --enable-ffmpeg \
+            --enable-avutil \
+            --enable-avcodec \
+            --enable-avformat \
+            --enable-avfilter \
+            --enable-swresample \
+            --enable-filter=aresample \
+            --enable-filter=aformat \
             --enable-protocol=file \
-            --enable-whisper --enable-filter=whisper \
-            --enable-decoder=srt --enable-decoder=movtext --enable-decoder=webvtt \
-            --enable-decoder=ass --enable-decoder=ssa --enable-decoder=subrip \
-            --enable-encoder=srt --enable-encoder=subrip --enable-encoder=movtext \
-            --enable-demuxer=mov --enable-demuxer=matroska --enable-demuxer=ass \
-            --enable-demuxer=srt --enable-demuxer=webvtt \
-            --enable-demuxer=wav --enable-demuxer=mp3 --enable-demuxer=aac \
-            --enable-decoder=pcm_s16le --enable-decoder=mp3 --enable-decoder=aac \
+            --enable-static \
+            --disable-shared \
+            --disable-autodetect \
+            --enable-whisper \
+            --enable-filter=whisper \
+            --enable-decoder=srt \
+            --enable-decoder=movtext \
+            --enable-decoder=webvtt \
+            --enable-decoder=ass \
+            --enable-decoder=ssa \
+            --enable-decoder=subrip \
+            --enable-encoder=srt \
+            --enable-encoder=subrip \
+            --enable-encoder=movtext \
+            --enable-demuxer=mov \
+            --enable-demuxer=matroska \
+            --enable-demuxer=ass \
+            --enable-demuxer=srt \
+            --enable-demuxer=webvtt \
             --enable-muxer=srt \
+            --enable-muxer=null \
+            --enable-muxer=wav \
+            --enable-muxer=mp3 \
+            --enable-muxer=aac \
+            --enable-muxer=pcm_s16le \
+            --enable-demuxer=wav \
+            --enable-demuxer=mp3 \
+            --enable-demuxer=aac \
+            --enable-encoder=pcm_s16le \
+            --enable-encoder=mp3 \
+            --enable-encoder=aac \
+            --enable-decoder=pcm_s16le \
+            --enable-decoder=mp3 \
+            --enable-decoder=aac \
             --pkg-config-flags="--static" \
             --extra-cflags="-I/usr/local/include" \
             --extra-ldflags="-L/usr/local/lib"
@@ -107,8 +138,13 @@ jobs:
       - name: Smoke Test
         shell: msys2 {0}
         run: |
+          /usr/local/bin/ffmpeg.exe -version
+          /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E "(srt|subrip|movtext|mp3|aac|pcm_s16le)" || echo "Some encoders missing"
+          /usr/local/bin/ffmpeg.exe -hide_banner -decoders | grep -E "(srt|movtext|webvtt|ass|ssa)" || echo "Subtitle decoders missing"
+          /usr/local/bin/ffmpeg.exe -hide_banner -decoders | grep -E "(mp3|aac|pcm_s16le)" || echo "Audio decoders missing"
+          /usr/local/bin/ffmpeg.exe -hide_banner -formats | grep -E "(mov|matroska|srt|wav|mp3|aac|null)" || echo "Some formats missing"
           /usr/local/bin/ffmpeg.exe -hide_banner -filters | grep -i whisper || (echo 'Whisper filter missing' && exit 1)
-          /usr/local/bin/ffmpeg.exe -hide_banner -encoders | grep -E 'subrip' || echo 'subrip encoder missing'
+          /usr/local/bin/ffmpeg.exe -hide_banner -muxers | grep -E "(srt|null|wav|mp3|aac|pcm_s16le)" || echo "Some muxers missing"
 
       - name: Package Artifact
         shell: msys2 {0}
@@ -138,6 +174,13 @@ jobs:
           The pkg-config file (whisper.pc) is NOT included because it only
           matters when compiling software against libwhisper. End users do not need it.
 
+          Supported features:
+            - Whisper filter for audio transcription
+            - Multiple audio codecs (MP3, AAC, PCM)
+            - Multiple subtitle formats (SRT, ASS, SSA, WebVTT)
+            - Audio format conversion (aresample, aformat filters)
+            - Multiple output formats (null, wav, mp3, aac, pcm_s16le)
+
           Usage example:
             ffmpeg -i input.wav -filter:a "whisper=model=ggml-tiny.en.bin:task=transcribe" -f null -
 
@@ -147,6 +190,8 @@ jobs:
 
           Build flags summary:
             --enable-whisper --enable-filter=whisper (OpenMP enabled)
+            --enable-filter=aresample --enable-filter=aformat
+            --enable-muxer=null --enable-muxer=wav --enable-muxer=mp3 --enable-muxer=aac --enable-muxer=pcm_s16le
           R
 
       - name: Verify Packaged FFmpeg Runs
