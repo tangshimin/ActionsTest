@@ -18,96 +18,24 @@ jobs:
             artifact_name: ffmpeg-macos-aarch64
 
     steps:
-      - name: Prepare tools & deps
+      - name: Install dependencies
         run: |
-          # Use brew to install build dependencies (add cmake for whisper.cpp)
-          brew update
-          brew install automake libtool nasm pkg-config yasm cmake
-          echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
+          brew install automake libtool nasm pkg-config yasm
 
       - name: Download FFmpeg source code
         run: |
           git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
           cd ffmpeg
 
-      - name: Clone & Build whisper.cpp (static only)
+      - name: Configure FFmpeg
         run: |
-          set -euo pipefail
-          PREFIX="$GITHUB_WORKSPACE/local"
-          mkdir -p "$PREFIX"
-          git clone https://github.com/ggerganov/whisper.cpp.git
-          cd whisper.cpp
-          mkdir -p build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-                -DWHISPER_BUILD_TESTS=OFF \
-                -DWHISPER_BUILD_EXAMPLES=OFF \
-                -DWHISPER_BUILD_SERVER=OFF \
-                -DBUILD_SHARED_LIBS=OFF \
-                -DWHISPER_USE_SYSTEM_GGML=OFF \
-                -DWHISPER_ALL_WARNINGS=OFF \
-                -DWHISPER_CURL=OFF \
-                -DWHISPER_SDL2=OFF \
-                -DWHISPER_FFMPEG=OFF \
-                -DWHISPER_COREML=OFF \
-                -DWHISPER_OPENVINO=OFF \
-                ..
-          cmake --build . --config Release -j ${NPROC}
-          cmake --install .
-          
-          # 验证安装
-          echo "Installed static libraries:"
-          find "${PREFIX}/lib" -name "*.a" | sort
-          echo "Installed headers:"
-          find "${PREFIX}/include" -name "*.h" | sort
-          
-          # 验证自动生成的 whisper.pc 文件
-          if [ -f "${PREFIX}/lib/pkgconfig/whisper.pc" ]; then
-            echo "✅ whisper.pc 文件已自动生成"
-            cat "${PREFIX}/lib/pkgconfig/whisper.pc"
-          else
-            echo "❌ whisper.pc 文件未生成，手动创建..."
-            PC_FILE="${PREFIX}/lib/pkgconfig/whisper.pc"
-            mkdir -p "${PREFIX}/lib/pkgconfig"
-            cat > "$PC_FILE" << EOF
-          prefix=${PREFIX}
-          exec_prefix=\${prefix}
-          libdir=\${exec_prefix}/lib
-          includedir=\${prefix}/include
-
-          Name: whisper
-          Description: Port of OpenAI's Whisper model in C/C++
-          Version: 1.8.0
-          Libs: -L\${libdir} -lwhisper -lggml-base -lggml-blas -lggml-cpu -lggml-metal -lggml
-          Libs.private: -framework Accelerate -framework Metal -framework Foundation -lc++
-          Cflags: -I\${includedir}
-          EOF
-          fi
-
-      - name: Configure FFmpeg (with whisper support)
-        run: |
-          set -euo pipefail
           cd ffmpeg
-          PREFIX="$GITHUB_WORKSPACE/local"
-          export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          
-          # 验证 whisper 可用
-          pkg-config --exists whisper || { echo 'whisper package not found'; exit 1; }
-          
           ./configure --disable-everything \
             --disable-ffprobe \
             --enable-ffmpeg \
-            --enable-avutil \
-            --enable-avcodec \
             --enable-avformat \
-            --enable-avfilter \
-            --enable-swresample \
-            --enable-protocol=file \
-            --enable-static \
-            --disable-shared \
-            --disable-autodetect \
-            --enable-whisper \
-            --enable-filter=whisper \
+            --enable-avcodec \
+            --enable-avutil \
             --enable-decoder=srt \
             --enable-decoder=movtext \
             --enable-decoder=webvtt \
@@ -123,40 +51,18 @@ jobs:
             --enable-demuxer=srt \
             --enable-demuxer=webvtt \
             --enable-muxer=srt \
-            --enable-demuxer=wav \
-            --enable-demuxer=mp3 \
-            --enable-demuxer=aac \
-            --enable-decoder=pcm_s16le \
-            --enable-decoder=mp3 \
-            --enable-decoder=aac \
-            --pkg-config-flags="--static" \
-            --extra-cflags="-I${PREFIX}/include" \
-            --extra-ldflags="-L${PREFIX}/lib -framework Accelerate"
+            --enable-protocol=file \
 
-      - name: Build & Install FFmpeg
+      - name: Build and install FFmpeg
         run: |
-          set -euo pipefail
           cd ffmpeg
-            make -j ${NPROC}
-            sudo make install
+          make
+          sudo make install
 
-      - name: Verify static linking
-        run: |
-          otool -L /usr/local/bin/ffmpeg || true
-          file /usr/local/bin/ffmpeg || true
-          /usr/local/bin/ffmpeg -hide_banner -filters | grep -i whisper || echo "Whisper filter not found"
+      - name: Check FFmpeg version
+        run: ffmpeg -version
 
-      - name: Basic Functional Tests (codecs + whisper presence)
-        run: |
-          set -euo pipefail
-          /usr/local/bin/ffmpeg -version
-          /usr/local/bin/ffmpeg -encoders | grep -E "(srt|subrip|movtext)" || echo "Subtitle encoders missing"
-          /usr/local/bin/ffmpeg -decoders | grep -E "(srt|movtext|webvtt|ass|ssa)" || echo "Subtitle decoders missing"
-          /usr/local/bin/ffmpeg -decoders | grep -E "(mp3|aac|pcm_s16le)" || echo "Audio decoders missing"
-          /usr/local/bin/ffmpeg -formats | grep -E "(mov|matroska|srt|wav|mp3|aac)" || echo "Some formats missing"
-          /usr/local/bin/ffmpeg -hide_banner -filters | grep -i whisper || echo "Whisper filter missing"
-
-      - name: Upload artifact (ffmpeg binary only)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
